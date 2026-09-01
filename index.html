@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>単熟語 EX 準1級 Digital</title>
+  <style>
+    :root {
+      --primary: #d81b60;
+      --primary-dark: #8e24aa;
+      --bg: #fce4ec;
+      --card-bg: #ffffff;
+      --text-main: #212121;
+      --text-sub: #555555;
+      --red-sheet: #ff1744;
+      --btn-unknown: #e53935;
+      --btn-known: #43a047;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      padding: 10px;
+      min-height: 100vh;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(216, 27, 96, 0.2);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 90vh;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+    }
+
+    .header-sub { font-size: 0.75rem; letter-spacing: 1.5px; opacity: 0.9; }
+    .header-title {
+      font-size: 1.4rem; font-weight: 900; margin-top: 4px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .ex-badge {
+      background: #000; color: #fff; padding: 1px 6px;
+      border-radius: 4px; font-size: 0.85rem; border: 1px solid #fff;
+    }
+
+    /* ユニット選択・プログレス */
+    .controls {
+      padding: 12px 15px; background: #fff; border-bottom: 1px solid #f8bbd0;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    }
+
+    select {
+      padding: 6px 10px; border-radius: 8px; border: 1px solid var(--primary);
+      font-weight: bold; color: var(--primary-dark); outline: none; background: #fff;
+    }
+
+    .red-sheet-btn {
+      background: var(--red-sheet); color: white; border: none; padding: 6px 12px;
+      border-radius: 20px; font-weight: bold; font-size: 0.8rem; cursor: pointer;
+    }
+
+    .progress-bar-container { background: #f3e5f5; height: 6px; width: 100%; }
+    .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), var(--primary-dark)); transition: width 0.3s; }
+
+    /* メインカードエリア */
+    .main-content { padding: 15px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+
+    .card {
+      background: #fff; border: 2px solid #f8bbd0; border-radius: 16px;
+      padding: 16px; position: relative; display: flex; flex-direction: column; gap: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    }
+
+    .card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-sub); }
+    .word-id { font-weight: bold; color: var(--primary-dark); background: #fce4ec; padding: 2px 8px; border-radius: 10px; }
+
+    .word-head { text-align: center; margin: 10px 0; }
+    .word-title { font-size: 2.2rem; font-weight: 800; color: var(--primary-dark); line-height: 1.1; }
+    .word-phonetic { font-size: 0.95rem; color: var(--text-sub); margin-top: 4px; }
+    .etymology { font-size: 0.8rem; color: #7b1fa2; background: #f3e5f5; display: inline-block; padding: 2px 8px; border-radius: 6px; margin-top: 6px; }
+
+    /* 赤シート対応エリア */
+    .meaning-box {
+      background: #fff8fa; border-left: 4px solid var(--primary); padding: 10px 12px;
+      border-radius: 4px; font-size: 1.1rem; font-weight: bold;
+    }
+
+    .example-box { font-size: 0.9rem; color: #333; background: #fafafa; padding: 10px; border-radius: 8px; line-height: 1.4; }
+    .example-en { font-weight: 600; margin-bottom: 4px; }
+    .example-ja { color: var(--text-sub); font-size: 0.85rem; }
+
+    .note-box { font-size: 0.8rem; color: #666; background: #fffde7; padding: 8px; border-radius: 6px; border-left: 3px solid #fbc02d; }
+
+    /* 赤シート隠しモード時のスタイル */
+    .red-sheet-active .hide-target {
+      background-color: var(--red-sheet) !important;
+      color: transparent !important;
+      border-radius: 4px;
+      user-select: none;
+    }
+
+    /* アクションボタン */
+    .actions { display: flex; gap: 10px; padding: 10px 15px 15px; }
+    .btn {
+      flex: 1; padding: 14px; border: none; border-radius: 12px; font-size: 0.95rem;
+      font-weight: bold; color: white; cursor: pointer; transition: transform 0.1s;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-unknown { background-color: var(--btn-unknown); }
+    .btn-known { background-color: var(--btn-known); }
+    .btn-audio { background: #eee; color: #333; border: 1px solid #ccc; width: 45px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+
+    .status-footer { text-align: center; font-size: 0.75rem; color: var(--text-sub); padding-bottom: 10px; }
+  </style>
+</head>
+<body class="red-sheet-active">
+
+<div class="app-container">
+  <div class="header">
+    <div class="header-sub">EIKEN Grade Pre-1</div>
+    <div class="header-title">単熟語 <span class="ex-badge">EX</span> Digital</div>
+  </div>
+
+  <div class="controls">
+    <select id="unitSelect" onchange="loadUnit()"></select>
+    <button class="red-sheet-btn" onclick="toggleRedSheet()">赤シート ON/OFF</button>
+  </div>
+
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="main-content">
+    <div class="card" id="cardArea">
+      <div class="card-meta">
+        <span class="word-id" id="wordId">#0001</span>
+        <span id="partUnitTag">Part 1 | Unit 01</span>
+      </div>
+
+      <div class="word-head">
+        <div class="word-title" id="wordText">vulnerable</div>
+        <div class="word-phonetic" id="phoneticText">[vʌ́lnərəbl]</div>
+        <div class="etymology" id="etymologyText">vulnus(傷つける) + -able(できる)</div>
+      </div>
+
+      <div class="meaning-box">
+        <span class="hide-target" id="meaningText">(人・感情などが) 傷つきやすい、脆弱な</span>
+      </div>
+
+      <div class="example-box">
+        <div class="example-en" id="exampleEn">Patients are vulnerable to infection just after surgery.</div>
+        <div class="example-ja"><span class="hide-target" id="exampleJa">患者は手術の直後、感染症にかかりやすくなる。</span></div>
+      </div>
+
+      <div class="note-box" id="noteBox">
+        <strong>【注記】</strong> <span class="hide-target" id="noteText">vulnerability 脆弱性</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-audio" onclick="playAudio()" title="発音を聞く">🔊</button>
+    <button class="btn btn-unknown" onclick="answer(false)">まだ (←)</button>
+    <button class="btn btn-known" onclick="answer(true)">覚えた (→)</button>
+  </div>
+
+  <div class="status-footer" id="statusFooter">
+    残問数: 0 | 習得済み: 0
+  </div>
+</div>
+
+<script>
+  // 『単熟語EX 準1級』データ構造定義 (Part/Unit/No/発音記号/語根/訳/例文/注記)
+  const masterWords = [
+    // Part 1: 単語 (Unit 01)
+    { id: 1, part: 1, unit: 1, word: "vulnerable", phonetic: "[vʌ́lnərəbl]", etym: "vulnus(傷つける) + -able(できる)", meaning: "(人・感情などが) 傷つきやすい、脆弱な", exEn: "Patients are vulnerable to infection just after surgery.", exJa: "患者は手術の直後、感染症にかかりやすくなる。", note: "vulnerability 脆弱性" },
+    { id: 2, part: 1, unit: 1, word: "heed", phonetic: "[híːd]", etym: "古英語 (注意払う)", meaning: "～に気をつける、～を心に留める", exEn: "Make sure to heed all the warning signs.", exJa: "すべての警戒標識に気をつけるようにしてください。", note: "pay heed to ~ (～に注意を払う)" },
+    { id: 3, part: 1, unit: 1, word: "bystander", phonetic: "[báistaændər]", etym: "by(側に) + stand(立つ人)", meaning: "傍観者、見物人", exEn: "A bystander captured the arrest on video.", exJa: "その場に居合わせた人が逮捕の様子を動画に収めた。", note: "≒onlooker / stand by (傍観する)" },
+    { id: 4, part: 1, unit: 1, word: "congestion", phonetic: "[kəndʒéstʃən]", etym: "con(共に) + gest(運ぶ) + -ion", meaning: "(交通・場所などの) 混雑", exEn: "The bridge eases congestion in the area.", exJa: "その橋は地域の混雑を緩和している。", note: "congested 混雑した" },
+    { id: 5, part: 1, unit: 1, word: "discard", phonetic: "[diskáːrd]", etym: "dis-(分離) + card(カード)", meaning: "(不用品など)を捨てる、処分する", exEn: "She discarded all her appliances and replaced them.", exJa: "彼女はすべての電化製品を捨てて買い換えた。", note: "≒throw away" },
+    { id: 6, part: 1, unit: 1, word: "blaze", phonetic: "[bléiz]", etym: "燃え盛る炎", meaning: "(燃え盛る) 炎、火災", exEn: "The blaze was completely out of control.", exJa: "炎は完全に制御不能で、あっという間に燃え広がった。", note: "動：激しく燃える" },
+    { id: 7, part: 1, unit: 1, word: "clumsy", phonetic: "[klʌ́mzi]", etym: "不器用な", meaning: "不器用な、ぎこちない", exEn: "He is a little clumsy with a paintbrush.", exJa: "彼は絵の具を使うのが少し不器用だ。", note: "対：dexterous (器用な)" },
+    { id: 8, part: 1, unit: 1, word: "eliminate", phonetic: "[ilímənèit]", etym: "e-(外に) + limin(限界) + -ate", meaning: "①～を取り除く ②(対戦相手)を敗退させる", exEn: "We must eliminate major sources of pollution quickly.", exJa: "私たちは主要な汚染源を早急に除去しなければならない。", note: "elimination 除去" },
+    
+    // Part 2: 熟語 (Unit 15)
+    { id: 2401, part: 2, unit: 15, word: "phase out", phonetic: "[-]", etym: "段階的排除", meaning: "～を段階的に廃止・縮小する", exEn: "The government decided to phase out nuclear power.", exJa: "政府は原子力発電を段階的に廃止することを決定した。", note: "対：phase in (段階的に導入する)" }
+  ];
+
+  let currentQueue = [];
+  let currentWord = null;
+  let learnedSet = new Set(JSON.parse(localStorage.getItem('ex_learned_ids') || '[]'));
+
+  // 初期化
+  window.onload = () => {
+    buildUnitSelector();
+    loadUnit();
+    
+    // キーボードショートカット
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') answer(false);
+      if (e.key === 'ArrowRight') answer(true);
+      if (e.key === ' ') { e.preventDefault(); toggleRedSheet(); }
+      if (e.key === 's' || e.key === 'S') playAudio();
+    });
+  };
+
+  function buildUnitSelector() {
+    const select = document.getElementById('unitSelect');
+    select.innerHTML = '';
+    
+    // 全Part/Unitを動的抽出
+    const units = [...new Set(masterWords.map(w => `Part ${w.part} - Unit ${String(w.unit).padStart(2, '0')}`))];
+    units.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u;
+      opt.textContent = u;
+      select.appendChild(opt);
+    });
+    
+    const allOpt = document.createElement('option');
+    allOpt.value = "ALL";
+    allOpt.textContent = "全単語 (ランダム復習)";
+    select.appendChild(allOpt);
+  }
+
+  function loadUnit() {
+    const val = document.getElementById('unitSelect').value;
+    if (val === "ALL") {
+      currentQueue = [...masterWords];
+    } else {
+      const [pStr, uStr] = val.split(' - ');
+      const pNum = parseInt(pStr.replace('Part ', ''));
+      const uNum = parseInt(uStr.replace('Unit ', ''));
+      currentQueue = masterWords.filter(w => w.part === pNum && w.unit === uNum);
+    }
+    renderCard();
+  }
+
+  function renderCard() {
+    const unlearnedQueue = currentQueue.filter(w => !learnedSet.has(w.id));
+    
+    // 進捗計算
+    const total = currentQueue.length;
+    const learnedCount = total - unlearnedQueue.length;
+    const percent = total === 0 ? 100 : (learnedCount / total) * 100;
+    
+    document.getElementById('progressBar').style.width = `${percent}%`;
+    document.getElementById('statusFooter').innerText = `Unit内残問数: ${unlearnedQueue.length} | 習得済み: ${learnedCount} / ${total}`;
+
+    if (unlearnedQueue.length === 0) {
+      document.getElementById('wordId').innerText = "#----";
+      document.getElementById('wordText').innerText = "COMPLETE!";
+      document.getElementById('phoneticText').innerText = "";
+      document.getElementById('etymologyText').innerText = "🎉";
+      document.getElementById('meaningText').innerText = "このUnitの単語はすべてマスターしました！";
+      document.getElementById('exampleEn').innerText = "";
+      document.getElementById('exampleJa').innerText = "";
+      document.getElementById('noteText').innerText = "上のメニューから別のUnitを選択するか、復習を行ってください。";
+      currentWord = null;
+      return;
+    }
+
+    // キューの先頭を表示
+    currentWord = unlearnedQueue[0];
+    document.getElementById('wordId').innerText = `#${String(currentWord.id).padStart(4, '0')}`;
+    document.getElementById('partUnitTag').innerText = `Part ${currentWord.part} | Unit ${String(currentWord.unit).padStart(2, '0')}`;
+    document.getElementById('wordText').innerText = currentWord.word;
+    document.getElementById('phoneticText').innerText = currentWord.phonetic;
+    document.getElementById('etymologyText').innerText = currentWord.etym || '';
+    document.getElementById('meaningText').innerText = currentWord.meaning;
+    document.getElementById('exampleEn').innerText = currentWord.exEn;
+    document.getElementById('exampleJa').innerText = currentWord.exJa;
+    document.getElementById('noteText').innerText = currentWord.note || '-';
+
+    // 自動音声再生
+    playAudio();
+  }
+
+  function answer(isKnown) {
+    if (!currentWord) return;
+
+    if (isKnown) {
+      learnedSet.add(currentWord.id);
+      localStorage.setItem('ex_learned_ids', JSON.stringify([...learnedSet]));
+    } else {
+      // 未修得の場合は配列の後ろに移動（再反復ループ）
+      const item = currentQueue.shift();
+      currentQueue.push(item);
+      renderCard();
+      return;
+    }
+
+    renderCard();
+  }
+
+  function toggleRedSheet() {
+    document.body.classList.toggle('red-sheet-active');
+  }
+
+  function playAudio() {
+    if (!currentWord || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const uttr = new SpeechSynthesisUtterance(currentWord.word);
+    uttr.lang = 'en-US';
+    uttr.rate = 0.9;
+    window.speechSynthesis.speak(uttr);
+  }
+</script>
+</body>
+</html>
