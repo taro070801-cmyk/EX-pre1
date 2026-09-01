@@ -187,12 +187,9 @@
 </div>
 
 <script>
-  // 『単熟語EX 準1級』データ構造定義 (Part/Unit/No/発音記号/語根/訳/例文/注記)
+  // 『単熟語EX 準1級』データ構造定義
   const masterWords = [
-    // Part 1: 単語 (Unit 01)
-    # 1680語の単語リストデータ（Unit 1〜14、各120語）
-
-words_data = [
+   # 1680語の単語リストデータ（Unit 1〜14、各120語）
     # --- Unit 1 (1 - 120) ---
     {"id": 1, "unit": 1, "word": "vulnerable", "meaning": "傷つきやすい"},
     {"id": 2, "unit": 1, "word": "heed", "meaning": "注意を払う"},
@@ -1900,9 +1897,8 @@ words_data = [
     {"id": 1678, "unit": 14, "word": "returnee", "meaning": "帰国子女"},
     {"id": 1679, "unit": 14, "word": "offspring", "meaning": "子孫"},
     {"id": 1680, "unit": 14, "word": "debris", "meaning": "破片"},
-];
- // Part 2: 熟語 (Unit 15)
-  
+]
+
 # --- 活用用のヘルパー関数 ---
 
 def get_words_by_unit(unit_num):
@@ -1919,7 +1915,6 @@ print(f"Total words: {len(words_data)}")
 print(f"Unit 1 count: {len(unit1)}")
 print(f"First word in Unit 1: {unit1[0]}")
 print(f"Last word in Unit 1: {unit1[-1]}")
-   
 
   let currentQueue = [];
   let currentWord = null;
@@ -1930,8 +1925,10 @@ print(f"Last word in Unit 1: {unit1[-1]}")
     buildUnitSelector();
     loadUnit();
     
-    // キーボードショートカット
+    // キーボードショートカット（フォーム選択時の誤作動防止を追加）
     document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      
       if (e.key === 'ArrowLeft') answer(false);
       if (e.key === 'ArrowRight') answer(true);
       if (e.key === ' ') { e.preventDefault(); toggleRedSheet(); }
@@ -1943,7 +1940,6 @@ print(f"Last word in Unit 1: {unit1[-1]}")
     const select = document.getElementById('unitSelect');
     select.innerHTML = '';
     
-    // 全Part/Unitを動的抽出
     const units = [...new Set(masterWords.map(w => `Part ${w.part} - Unit ${String(w.unit).padStart(2, '0')}`))];
     units.forEach(u => {
       const opt = document.createElement('option');
@@ -1974,7 +1970,6 @@ print(f"Last word in Unit 1: {unit1[-1]}")
   function renderCard() {
     const unlearnedQueue = currentQueue.filter(w => !learnedSet.has(w.id));
     
-    // 進捗計算
     const total = currentQueue.length;
     const learnedCount = total - unlearnedQueue.length;
     const percent = total === 0 ? 100 : (learnedCount / total) * 100;
@@ -1995,7 +1990,6 @@ print(f"Last word in Unit 1: {unit1[-1]}")
       return;
     }
 
-    // キューの先頭を表示
     currentWord = unlearnedQueue[0];
     document.getElementById('wordId').innerText = `#${String(currentWord.id).padStart(4, '0')}`;
     document.getElementById('partUnitTag').innerText = `Part ${currentWord.part} | Unit ${String(currentWord.unit).padStart(2, '0')}`;
@@ -2007,7 +2001,6 @@ print(f"Last word in Unit 1: {unit1[-1]}")
     document.getElementById('exampleJa').innerText = currentWord.exJa;
     document.getElementById('noteText').innerText = currentWord.note || '-';
 
-    // 自動音声再生
     playAudio();
   }
 
@@ -2018,11 +2011,15 @@ print(f"Last word in Unit 1: {unit1[-1]}")
       learnedSet.add(currentWord.id);
       localStorage.setItem('ex_learned_ids', JSON.stringify([...learnedSet]));
     } else {
-      // 未修得の場合は配列の後ろに移動（再反復ループ）
-      const item = currentQueue.shift();
-      currentQueue.push(item);
-      renderCard();
-      return;
+      // 未習得の場合：現在の単語を配列の末尾に回す
+      const unlearnedQueue = currentQueue.filter(w => !learnedSet.has(w.id));
+      const currentIndex = unlearnedQueue.findIndex(w => w.id === currentWord.id);
+      
+      if (currentIndex !== -1 && unlearnedQueue.length > 1) {
+        const targetIndex = currentQueue.findIndex(w => w.id === currentWord.id);
+        const [movedItem] = currentQueue.splice(targetIndex, 1);
+        currentQueue.push(movedItem);
+      }
     }
 
     renderCard();
