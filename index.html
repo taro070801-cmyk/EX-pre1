@@ -394,12 +394,6 @@
           <option value="quiz">4択テスト</option>
         </select>
 
-        <label>出題順序</label>
-        <select id="order-select">
-          <option value="random">ランダム</option>
-          <option value="sequential">出題順（そのまま）</option>
-        </select>
-
         <label>出題範囲</label>
         <select id="range-type-select" onchange="toggleRangeInput()">
           <option value="all">全問</option>
@@ -2512,375 +2506,336 @@
       // 必要に応じてここにデータを追加してください
     ];
 
+    let WORD_DATA = [];
+    // 進捗・正答率データのロード（ストリークや試行回数）
+    let progressData = JSON.parse(localStorage.getItem('ex_word_progress_v2') || '{}');
 
-    let words = [];
+    function initData() {
+      const seen = new Set();
+      let index = 1;
+
+      RAW_WORD_DATA.forEach(item => {
+        const wordKey = item.w.trim().toLowerCase();
+        if (!seen.has(wordKey)) {
+          seen.add(wordKey);
+          
+          let unit = 1;
+          if (index <= 1680) {
+            unit = Math.ceil(index / 120);
+          } else {
+            unit = 14 + Math.ceil((index - 1680) / 112);
+          }
+
+          const saved = progressData[index] || { streak: 0, total: 0, correct: 0 };
+
+          WORD_DATA.push({
+            id: index,
+            w: item.w,
+            m: item.m,
+            unit: `Unit ${unit}`,
+            unitNum: unit,
+            streak: saved.streak,
+            total: saved.total || 0,
+            correct: saved.correct || 0
+          });
+          index++;
+        }
+      });
+    }
+
+    let currentList = [];
     let currentIndex = 0;
-    let quizOptions = [];
-    let timerInterval = null;
-    let timeLeft = 0;
-    let maxTime = 0;
-    let currentMode = 'flashcard';
-    let userProgress = {}; // { wordIndex: { status: 0/1/2, count: 0 } }
-
-    // 重複除外データの作成
-    const UNIQUE_WORDS = [];
-    const seenWords = new Set();
-    RAW_WORD_DATA.forEach((item, index) => {
-      if (!seenWords.has(item.w)) {
-        seenWords.add(item.w);
-        UNIQUE_WORDS.push({
-          id: UNIQUE_WORDS.length + 1,
-          w: item.w,
-          m: item.m,
-          unit: Math.floor(UNIQUE_WORDS.length / 30) + 1 // 30語ごとにUnitを割り振る
-        });
-      }
-    });
-
-    // 初期化
-    window.onload = function() {
-      loadProgress();
-      initFilterUnits();
-      renderWordList();
-      renderStats();
-    };
-
-    function loadProgress() {
-      const saved = localStorage.getItem('eiken_progress');
-      if (saved) {
-        try { userProgress = JSON.parse(saved); } catch(e) {}
-      }
-    }
-
-    function saveProgress() {
-      localStorage.setItem('eiken_progress', JSON.stringify(userProgress));
-    }
+    let timerId = null;
+    let isAnswerRevealed = false;
 
     function switchTab(tabName) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       
-      if (tabName === 'study') {
-        document.querySelector('.tabs button:nth-child(1)').classList.add('active');
-        document.getElementById('tab-study').classList.add('active');
-      } else if (tabName === 'list') {
-        document.querySelector('.tabs button:nth-child(2)').classList.add('active');
-        document.getElementById('tab-list').classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+      event.currentTarget.classList.add('active');
+
+      if (tabName === 'list') {
+        updateUnitSelectors();
         renderWordList();
       } else if (tabName === 'stats') {
-        document.querySelector('.tabs button:nth-child(3)').classList.add('active');
-        document.getElementById('tab-stats').classList.add('active');
         renderStats();
       }
     }
 
-    function toggleRangeInput() {
-      const val = document.getElementById('range-type-select').value;
-      document.getElementById('unit-input-group').classList.add('hidden');
-      document.getElementById('number-input-group').classList.add('hidden');
+    function updateUnitSelectors() {
+      const units = [...new Set(WORD_DATA.map(w => w.unit))];
+      const filterUnit = document.getElementById('filterUnit');
+      const currentFilter = filterUnit.value;
+      
+      filterUnit.innerHTML = '<option value="all">すべて表示</option>' + 
+        units.map(u => `<option value="${u}">${u}</option>`).join('');
+      filterUnit.value = currentFilter;
+    }
 
-      if (val === 'unit') {
-        document.getElementById('unit-input-group').classList.remove('hidden');
-      } else if (val === 'number') {
-        document.getElementById('number-input-group').classList.remove('hidden');
+    function toggleRangeInput() {
+      const type = document.getElementById('range-type-select').value;
+      document.getElementById('unit-input-group').classList.toggle('hidden', type !== 'unit');
+      document.getElementById('number-input-group').classList.toggle('hidden', type !== 'number');
+    }
+
+    function speakWord() {
+      if ('speechSynthesis' in window) {
+        const current = currentList[currentIndex];
+        const uttr = new SpeechSynthesisUtterance(current.w);
+        uttr.lang = 'en-US';
+        window.speechSynthesis.speak(uttr);
       }
     }
 
     function startLearning() {
-      currentMode = document.getElementById('mode-select').value;
       const rangeType = document.getElementById('range-type-select').value;
-      const orderType = document.getElementById('order-select').value;
-      maxTime = parseInt(document.getElementById('time-limit').value) || 0;
-
-      // 範囲の絞り込み
-      let targetList = [...UNIQUE_WORDS];
-      if (rangeType === 'unit') {
+      
+      if (rangeType === 'all') {
+        currentList = [...WORD_DATA];
+      } else if (rangeType === 'unit') {
         const u = parseInt(document.getElementById('unit-val').value);
-        targetList = targetList.filter(item => item.unit === u);
+        currentList = WORD_DATA.filter(w => w.unitNum === u);
       } else if (rangeType === 'number') {
         const start = parseInt(document.getElementById('num-start').value) || 1;
-        const end = parseInt(document.getElementById('num-end').value) || UNIQUE_WORDS.length;
-        targetList = targetList.filter(item => item.id >= start && item.id <= end);
+        const end = parseInt(document.getElementById('num-end').value) || WORD_DATA.length;
+        currentList = WORD_DATA.filter(w => w.id >= start && w.id <= end);
       }
 
-      if (targetList.length === 0) {
-        alert('該当する単語がありません。範囲を確認してください。');
+      if (currentList.length === 0) {
+        alert('指定された範囲に単語が存在しません。');
         return;
-      }
-
-      // 出題順序の適用（ランダム or 出題順）
-      if (orderType === 'random') {
-        words = shuffleArray([...targetList]);
-      } else {
-        words = [...targetList];
       }
 
       currentIndex = 0;
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('study-screen').classList.remove('hidden');
-
-      // モードに応じたUI切り替え
-      if (currentMode === 'flashcard') {
-        document.getElementById('flashcard-controls').classList.remove('hidden');
-        document.getElementById('quiz-controls').classList.add('hidden');
-      } else {
-        document.getElementById('flashcard-controls').classList.add('hidden');
-        document.getElementById('quiz-controls').classList.remove('hidden');
-      }
-
-      loadCard();
+      
+      loadQuestion();
     }
 
-    function backToSetup() {
-      stopTimer();
-      document.getElementById('study-screen').classList.add('hidden');
-      document.getElementById('setup-screen').classList.remove('hidden');
-      renderStats();
-    }
-
-    function loadCard() {
-      stopTimer();
-      if (currentIndex >= words.length) {
-        alert('お疲れ様でした！この範囲の学習が完了しました。');
+    function loadQuestion() {
+      if (currentIndex >= currentList.length) {
+        alert('指定範囲の学習が完了しました！');
         backToSetup();
         return;
       }
 
-      const item = words[currentIndex];
-      document.getElementById('card-num').innerText = `No. ${item.id} (${currentIndex + 1}/${words.length})`;
+      const item = currentList[currentIndex];
+      isAnswerRevealed = false;
 
-      // ステータス表示更新
-      const prog = userProgress[item.id] || { status: 0 };
-      const statusBadge = document.getElementById('card-status');
-      statusBadge.className = `status-badge status-${prog.status}`;
-      statusBadge.innerText = prog.status === 2 ? '習得済' : prog.status === 1 ? '学習中' : '未修得';
-
+      document.getElementById('card-num').innerText = `No. ${item.id} (${item.unit})`;
       document.getElementById('target-word').innerText = item.w;
+      document.getElementById('target-meaning').innerText = item.m;
+      document.getElementById('target-meaning').classList.add('hidden');
+      document.getElementById('tap-hint').classList.remove('hidden');
 
-      // 音声自動再生
+      const statusEl = document.getElementById('card-status');
+      if (item.streak >= 5) {
+        statusEl.innerText = "完璧 (5連勝)";
+        statusEl.className = "status-badge status-2";
+      } else if (item.streak >= 3) {
+        statusEl.innerText = "理解 (3連勝)";
+        statusEl.className = "status-badge status-1";
+      } else {
+        statusEl.innerText = "未修得";
+        statusEl.className = "status-badge status-0";
+      }
+
       speakWord();
 
-      if (currentMode === 'flashcard') {
-        // フラッシュカードモード
-        document.getElementById('target-meaning').innerText = item.m;
-        document.getElementById('target-meaning').classList.add('hidden');
-        document.getElementById('tap-hint').classList.remove('hidden');
+      const mode = document.getElementById('mode-select').value;
+      if (mode === 'flashcard') {
+        document.getElementById('flashcard-controls').classList.remove('hidden');
+        document.getElementById('quiz-controls').classList.add('hidden');
         document.getElementById('eval-btns').classList.add('hidden');
-        document.querySelector('#flashcard-controls .btn-secondary').classList.remove('hidden');
       } else {
-        // 4択テストモード
+        document.getElementById('flashcard-controls').classList.add('hidden');
+        document.getElementById('quiz-controls').classList.remove('hidden');
         setupQuizOptions(item);
       }
 
-      // タイマー開始
-      if (maxTime > 0) {
-        startTimer();
-      }
-    }
-
-    function revealAnswer() {
-      document.getElementById('target-meaning').classList.remove('hidden');
-      document.getElementById('tap-hint').classList.add('hidden');
-      document.getElementById('eval-btns').classList.remove('hidden');
-      document.querySelector('#flashcard-controls .btn-secondary').classList.add('hidden');
-      stopTimer();
-    }
-
-    function handleEval(evalType) {
-      const item = words[currentIndex];
-      if (!userProgress[item.id]) {
-        userProgress[item.id] = { status: 0, count: 0 };
-      }
-
-      if (evalType === 'maru') {
-        userProgress[item.id].status = 2; // 習得
-      } else if (evalType === 'sankaku') {
-        userProgress[item.id].status = 1; // 学習中
-      } else {
-        userProgress[item.id].status = 0; // 未修得
-      }
-      saveProgress();
-
-      currentIndex++;
-      loadCard();
-    }
-
-    function setupQuizOptions(currentItem) {
-      document.getElementById('target-meaning').classList.remove('hidden');
-      document.getElementById('target-meaning').innerText = "（以下の選択肢から正しい意味を選べ）";
-      document.getElementById('tap-hint').classList.add('hidden');
-
-      // ダミー選択肢3つを選ぶ
-      let wrongCandidates = UNIQUE_WORDS.filter(w => w.id !== currentItem.id);
-      wrongCandidates = shuffleArray(wrongCandidates);
-      let choices = [currentItem, wrongCandidates[0], wrongCandidates[1], wrongCandidates[2]];
-      choices = shuffleArray(choices);
-
-      const container = document.getElementById('options-container');
-      container.innerHTML = '';
-
-      choices.forEach(choice => {
-        const btn = document.createElement('button');
-        btn.className = 'btn option-btn';
-        btn.innerText = choice.m;
-        btn.onclick = () => checkQuizAnswer(choice.id === currentItem.id, btn, currentItem);
-        container.appendChild(btn);
-      });
-    }
-
-    function checkQuizAnswer(isCorrect, selectedBtn, currentItem) {
-      stopTimer();
-      const buttons = document.querySelectorAll('#options-container button');
-      
-      if (!userProgress[currentItem.id]) {
-        userProgress[currentItem.id] = { status: 0, count: 0 };
-      }
-
-      buttons.forEach(btn => {
-        btn.disabled = true;
-        // 正解のボタンをハイライト
-        const matched = UNIQUE_WORDS.find(w => w.m === btn.innerText);
-        if (matched && matched.id === currentItem.id) {
-          btn.classList.add('correct');
-        }
-      });
-
-      if (isCorrect) {
-        userProgress[currentItem.id].status = 2;
-      } else {
-        selectedBtn.classList.add('incorrect');
-        userProgress[currentItem.id].status = 0;
-      }
-      saveProgress();
-
-      setTimeout(() => {
-        currentIndex++;
-        loadCard();
-      }, 1000);
+      startTimer();
     }
 
     function startTimer() {
-      timeLeft = maxTime * 10; // 0.1秒単位
-      const timerBar = document.getElementById('timer-bar');
-      timerBar.style.width = '100%';
+      clearInterval(timerId);
+      const limit = parseInt(document.getElementById('time-limit').value);
+      const bar = document.getElementById('timer-bar');
 
-      timerInterval = setInterval(() => {
+      if (limit <= 0) {
+        document.getElementById('timer-bg').classList.add('hidden');
+        return;
+      }
+
+      document.getElementById('timer-bg').classList.remove('hidden');
+      bar.style.width = '100%';
+      let timeLeft = limit * 10;
+
+      timerId = setInterval(() => {
         timeLeft--;
-        const percentage = (timeLeft / (maxTime * 10)) * 100;
-        timerBar.style.width = percentage + '%';
+        bar.style.width = `${(timeLeft / (limit * 10)) * 100}%`;
 
         if (timeLeft <= 0) {
-          stopTimer();
-          if (currentMode === 'flashcard') {
-            revealAnswer();
-          } else {
-            // 4択で時間切れの場合
-            const currentItem = words[currentIndex];
-            if (!userProgress[currentItem.id]) userProgress[currentItem.id] = { status: 0 };
-            userProgress[currentItem.id].status = 0;
-            saveProgress();
-            
-            currentIndex++;
-            loadCard();
-          }
+          clearInterval(timerId);
+          revealAnswer();
         }
       }, 100);
     }
 
-    function stopTimer() {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
+    function revealAnswer() {
+      if (isAnswerRevealed) return;
+      isAnswerRevealed = true;
+      document.getElementById('target-meaning').classList.remove('hidden');
+      document.getElementById('tap-hint').classList.add('hidden');
+
+      const mode = document.getElementById('mode-select').value;
+      if (mode === 'flashcard') {
+        document.getElementById('eval-btns').classList.remove('hidden');
       }
     }
 
-    function speakWord() {
-      const wordText = document.getElementById('target-word').innerText;
-      if ('speechSynthesis' in window && wordText) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(wordText);
-        utterance.lang = 'en-US';
-        window.speechSynthesis.speak(utterance);
+    function handleEval(result) {
+      clearInterval(timerId);
+      const item = currentList[currentIndex];
+
+      item.total++;
+      if (result === 'maru') {
+        item.streak++;
+        item.correct++;
+      } else if (result === 'sankaku') {
+        // 維持
+      } else {
+        item.streak = 0;
       }
+
+      saveProgress(item);
+      nextQuestion();
     }
 
-    function shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+    function setupQuizOptions(correctItem) {
+      const container = document.getElementById('options-container');
+      container.innerHTML = '';
+
+      let options = [correctItem];
+      let otherWords = WORD_DATA.filter(w => w.id !== correctItem.id);
+      
+      while (options.length < 4 && otherWords.length > 0) {
+        const randIdx = Math.floor(Math.random() * otherWords.length);
+        options.push(otherWords.splice(randIdx, 1)[0]);
       }
-      return array;
-    }
 
-    // 単語帳一覧機能
-    function initFilterUnits() {
-      const select = document.getElementById('filterUnit');
-      const maxUnit = Math.max(...UNIQUE_WORDS.map(w => w.unit));
-      for (let i = 1; i <= maxUnit; i++) {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.innerText = `Unit ${i}`;
-        select.appendChild(opt);
-      }
-    }
+      options.sort(() => Math.random() - 0.5);
 
-    function renderWordList() {
-      const filterVal = document.getElementById('filterUnit').value;
-      const grid = document.getElementById('wordGrid');
-      grid.innerHTML = '';
-
-      const list = filterVal === 'all' 
-        ? UNIQUE_WORDS 
-        : UNIQUE_WORDS.filter(w => w.unit == filterVal);
-
-      list.forEach(item => {
-        const prog = userProgress[item.id] || { status: 0 };
-        const statusText = prog.status === 2 ? '習得済' : prog.status === 1 ? '学習中' : '未修得';
-        const statusClass = `status-${prog.status}`;
-
-        const div = document.createElement('div');
-        div.className = 'word-card-item';
-        div.innerHTML = `
-          <div class="word-info">
-            <span class="unit-badge">Unit ${item.unit} (No.${item.id})</span>
-            <div class="term">${item.w}</div>
-            <div class="definition">${item.m}</div>
-          </div>
-          <div class="word-stats-info">
-            <span class="status-badge ${statusClass}">${statusText}</span>
-          </div>
-        `;
-        grid.appendChild(div);
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'btn option-btn';
+        btn.innerText = opt.m;
+        btn.onclick = () => selectQuizOption(btn, opt.id === correctItem.id);
+        container.appendChild(btn);
       });
     }
 
-    // 統計機能
+    function selectQuizOption(btnElement, isCorrect) {
+      clearInterval(timerId);
+      revealAnswer();
+
+      const item = currentList[currentIndex];
+      item.total++;
+
+      if (isCorrect) {
+        btnElement.classList.add('correct');
+        item.streak++;
+        item.correct++;
+      } else {
+        btnElement.classList.add('incorrect');
+        item.streak = 0;
+      }
+
+      saveProgress(item);
+
+      setTimeout(() => {
+        nextQuestion();
+      }, 1000);
+    }
+
+    function nextQuestion() {
+      currentIndex++;
+      loadQuestion();
+    }
+
+    function saveProgress(item) {
+      progressData[item.id] = {
+        streak: item.streak,
+        total: item.total,
+        correct: item.correct
+      };
+      localStorage.setItem('ex_word_progress_v2', JSON.stringify(progressData));
+    }
+
+    function renderWordList() {
+      const grid = document.getElementById('wordGrid');
+      const filter = document.getElementById('filterUnit').value;
+      const filtered = filter === 'all' ? WORD_DATA : WORD_DATA.filter(w => w.unit === filter);
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<p style="text-align: center; color: #94a3b8;">単語が登録されていません。</p>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(w => {
+        const rate = w.total > 0 ? Math.round((w.correct / w.total) * 100) : 0;
+        return `
+          <div class="word-card-item">
+            <div class="word-info">
+              <span class="unit-badge">${w.unit} (No.${w.id})</span>
+              <div class="term">${escapeHtml(w.w)}</div>
+              <div class="definition">${escapeHtml(w.m)}</div>
+            </div>
+            <div class="word-stats-info">
+              正答率: <strong>${rate}%</strong><br>
+              <span style="font-size:11px;">(${w.correct}/${w.total})</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     function renderStats() {
       const statsGrid = document.getElementById('statsGrid');
-      statsGrid.innerHTML = '';
+      const units = [...new Set(WORD_DATA.map(w => w.unit))];
 
-      const maxUnit = Math.max(...UNIQUE_WORDS.map(w => w.unit));
-      
-      for (let i = 1; i <= maxUnit; i++) {
-        const unitWords = UNIQUE_WORDS.filter(w => w.unit === i);
-        let masteredCount = 0;
-        unitWords.forEach(w => {
-          if (userProgress[w.id] && userProgress[w.id].status === 2) {
-            masteredCount++;
-          }
-        });
+      statsGrid.innerHTML = units.map(unit => {
+        const unitWords = WORD_DATA.filter(w => w.unit === unit);
+        const total = unitWords.reduce((sum, w) => sum + w.total, 0);
+        const correct = unitWords.reduce((sum, w) => sum + w.correct, 0);
+        const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-        const rate = Math.round((masteredCount / unitWords.length) * 100);
-
-        const card = document.createElement('div');
-        card.className = 'stat-card';
-        card.innerHTML = `
-          <h4>Unit ${i} (${unitWords.length}語)</h4>
-          <div class="stat-value">${rate}% <span style="font-size:12px; font-weight:normal; color:#64748b;">(${masteredCount}/${unitWords.length})</span></div>
+        return `
+          <div class="stat-card">
+            <h4>${unit}</h4>
+            <div class="stat-value">${rate}%</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">正解: ${correct} / 試行: ${total}</div>
+          </div>
         `;
-        statsGrid.appendChild(card);
-      }
+      }).join('');
     }
+
+    function backToSetup() {
+      clearInterval(timerId);
+      document.getElementById('setup-screen').classList.remove('hidden');
+      document.getElementById('study-screen').classList.add('hidden');
+    }
+
+   function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>'\"]/g, 
+    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+  );
+}
+
+    // 初期化実行
+    initData();
   </script>
 </body>
 </html>
