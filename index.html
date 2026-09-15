@@ -2511,7 +2511,7 @@
       let index = 1;
 
       RAW_WORD_DATA.forEach(item => {
-        const wordKey = item.w.trim().toLowerCase();
+        const wordKey = (item.w || '').trim().toLowerCase();
         if (!seen.has(wordKey)) {
           seen.add(wordKey);
           
