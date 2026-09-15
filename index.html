@@ -400,6 +400,14 @@
           <option value="unit">Unit指定</option>
           <option value="number">番号指定 (例: 1-120)</option>
         </select>
+       
+        <label>出題形式</label>
+<select id="question-order-select">
+  <option value="order">出る順 (登録順)</option>
+  <option value="random">ランダム</option>
+  <option value="unanswered">未回答のみ (出る順)</option>
+  <option value="unanswered-random">未回答のみ (ランダム)</option>
+</select>
 
         <div id="unit-input-group" class="hidden">
           <label>Unit指定 (1〜17)</label>
@@ -2589,30 +2597,57 @@
     }
 
     function startLearning() {
-      const rangeType = document.getElementById('range-type-select').value;
-      
-      if (rangeType === 'all') {
-        currentList = [...WORD_DATA];
-      } else if (rangeType === 'unit') {
-        const u = parseInt(document.getElementById('unit-val').value);
-        currentList = WORD_DATA.filter(w => w.unitNum === u);
-      } else if (rangeType === 'number') {
-        const start = parseInt(document.getElementById('num-start').value) || 1;
-        const end = parseInt(document.getElementById('num-end').value) || WORD_DATA.length;
-        currentList = WORD_DATA.filter(w => w.id >= start && w.id <= end);
-      }
+  const mode = document.getElementById('mode-select').value;
+  const rangeType = document.getElementById('range-type-select').value;
+  
+  // ▼ 追加した「出題形式」の値をここで取得
+  const orderType = document.getElementById('question-order-select') ? document.getElementById('question-order-select').value : 'order';
+  const timeLimitVal = parseInt(document.getElementById('time-limit').value) || 0;
 
-      if (currentList.length === 0) {
-        alert('指定された範囲に単語が存在しません。');
-        return;
-      }
+  let currentList = [];
 
-      currentIndex = 0;
-      document.getElementById('setup-screen').classList.add('hidden');
-      document.getElementById('study-screen').classList.remove('hidden');
-      
-      loadQuestion();
+  if (rangeType === 'all') {
+    currentList = [...WORD_DATA];
+  } else if (rangeType === 'unit') {
+    const u = parseInt(document.getElementById('unit-val').value);
+    currentList = WORD_DATA.filter(w => w.unitNum === u);
+  } else if (rangeType === 'number') {
+    const start = parseInt(document.getElementById('num-start').value) || 1;
+    const end = parseInt(document.getElementById('num-end').value) || WORD_DATA.length;
+    currentList = WORD_DATA.filter(w => w.id >= start && w.id <= end);
+  }
+
+  // ▼ 未回答フィルターの適用
+  if (orderType.includes('unanswered')) {
+    currentList = currentList.filter(word => {
+      const stats = userStats[word.w] || { status: 0 };
+      return stats.status === 0;
+    });
+  }
+
+  if (currentList.length === 0) {
+    alert("指定された範囲に単語が存在しないか、条件に一致する単語がありません。");
+    return;
+  }
+
+  // ▼ ランダム並び替え（Fisher-Yates シャッフル）の適用
+  if (orderType.includes('random')) {
+    for (let i = currentList.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [currentList[i], currentList[j]] = [currentList[j], currentList[i]];
     }
+  }
+
+  currentSessionWords = currentList;
+  currentIndex = 0;
+  currentMode = mode;
+  timeLimit = timeLimitVal;
+
+  document.getElementById('setup-screen').classList.add('hidden');
+  document.getElementById('study-screen').classList.remove('hidden');
+
+  loadQuestion();
+}
 
     function loadQuestion() {
       if (currentIndex >= currentList.length) {
