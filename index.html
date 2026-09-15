@@ -2823,11 +2823,12 @@
       document.getElementById('study-screen').classList.add('hidden');
     }
 
-    function escapeHtml(str) {
-      return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-      );
-    }
+   function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>'\"]/g, 
+    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+  );
+}
 
     // 初期化実行
     initData();
